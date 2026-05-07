@@ -1,4 +1,23 @@
-import React, { useState, useEffect } from 'react';
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>After the End — Job & Faction Tracker</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>★</text></svg>">
+<script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  body { margin: 0; padding: 0; background: #0e0c0a; }
+  #root { min-height: 100vh; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel" data-presets="react">
+const { useState, useEffect } = React;
 
 // === DATA ===
 
@@ -277,7 +296,7 @@ const clampRep = (v) => Math.max(REP_MIN, Math.min(REP_MAX, v));
 
 // === MAIN APP ===
 
-export default function App() {
+function App() {
   const [tab, setTab] = useState('active');
   const [factions, setFactions] = useState(DEFAULT_FACTIONS);
   const [activeJobs, setActiveJobs] = useState([]);
@@ -303,38 +322,40 @@ export default function App() {
   const [createGoalJobFor, setCreateGoalJobFor] = useState(null);
 
   useEffect(() => {
-    (async () => {
-      try {
-        const result = await window.storage.get(STORAGE_KEY);
-        if (result) {
-          const state = JSON.parse(result.value);
-          if (state.factions) setFactions(state.factions);
-          if (state.activeJobs) setActiveJobs(state.activeJobs);
-          if (state.history) setHistory(state.history);
-          if (state.library) setLibrary(state.library);
-          if (state.storyMissions) setStoryMissions(state.storyMissions);
-          if (state.goals) setGoals(state.goals);
-          if (state.rumors) setRumors(state.rumors);
-          if (state.players) setPlayers(state.players);
-          if (state.partyResources) setPartyResources(state.partyResources);
-          if (typeof state.stNotes === 'string') setStNotes(state.stNotes);
-          if (typeof state.currentDay === 'number') setCurrentDay(state.currentDay);
-          if (typeof state.lastFactionTurnDay === 'number') setLastFactionTurnDay(state.lastFactionTurnDay);
-        }
-      } catch (e) {
-        // Key doesn't exist yet - that's fine, use defaults
+    try {
+      const stored = localStorage.getItem(STORAGE_KEY);
+      if (stored) {
+        const state = JSON.parse(stored);
+        if (state.factions) setFactions(state.factions);
+        if (state.activeJobs) setActiveJobs(state.activeJobs);
+        if (state.history) setHistory(state.history);
+        if (state.library) setLibrary(state.library);
+        if (state.storyMissions) setStoryMissions(state.storyMissions);
+        if (state.goals) setGoals(state.goals);
+        if (state.rumors) setRumors(state.rumors);
+        if (state.players) setPlayers(state.players);
+        if (state.partyResources) setPartyResources(state.partyResources);
+        if (typeof state.stNotes === 'string') setStNotes(state.stNotes);
+        if (typeof state.currentDay === 'number') setCurrentDay(state.currentDay);
+        if (typeof state.lastFactionTurnDay === 'number') setLastFactionTurnDay(state.lastFactionTurnDay);
       }
-      setLoaded(true);
-    })();
+    } catch (e) {
+      console.error('Load failed:', e);
+    }
+    setLoaded(true);
   }, []);
 
   useEffect(() => {
     if (!loaded) return;
-    const state = {
-      factions, activeJobs, history, library, storyMissions,
-      goals, rumors, players, partyResources, stNotes, currentDay, lastFactionTurnDay
-    };
-    window.storage.set(STORAGE_KEY, JSON.stringify(state)).catch(e => console.error(e));
+    try {
+      const state = {
+        factions, activeJobs, history, library, storyMissions,
+        goals, rumors, players, partyResources, stNotes, currentDay, lastFactionTurnDay
+      };
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    } catch (e) {
+      console.error('Save failed:', e);
+    }
   }, [factions, activeJobs, history, library, storyMissions, goals, rumors, players, partyResources, stNotes, currentDay, lastFactionTurnDay, loaded]);
 
   const addJob = (job) => {
@@ -1029,28 +1050,6 @@ export default function App() {
         {tab === 'stnotes' && (
           <StNotesTab notes={stNotes} onChange={setStNotes} />
         )}
-        {tab === 'backup' && (
-          <BackupTab
-            getState={() => ({
-              factions, activeJobs, history, library, storyMissions,
-              goals, rumors, players, partyResources, stNotes, currentDay, lastFactionTurnDay
-            })}
-            applyState={(s) => {
-              if (s.factions) setFactions(s.factions);
-              if (s.activeJobs) setActiveJobs(s.activeJobs);
-              if (s.history) setHistory(s.history);
-              if (s.library) setLibrary(s.library);
-              if (s.storyMissions) setStoryMissions(s.storyMissions);
-              if (s.goals) setGoals(s.goals);
-              if (s.rumors) setRumors(s.rumors);
-              if (s.players) setPlayers(s.players);
-              if (s.partyResources) setPartyResources(s.partyResources);
-              if (typeof s.stNotes === 'string') setStNotes(s.stNotes);
-              if (typeof s.currentDay === 'number') setCurrentDay(s.currentDay);
-              if (typeof s.lastFactionTurnDay === 'number') setLastFactionTurnDay(s.lastFactionTurnDay);
-            }}
-          />
-        )}
       </main>
 
       {resolvingJob && (
@@ -1300,9 +1299,9 @@ function Header({ tab, setTab, activeCount, currentDay, factionTurnReady, pendin
             <button
               onClick={() => setMenuOpen(!menuOpen)}
               style={{
-                background: (tab === 'history' || tab === 'library' || tab === 'resources' || tab === 'stnotes' || tab === 'backup') ? 'var(--accent-dim)' : 'transparent',
-                color: (tab === 'history' || tab === 'library' || tab === 'resources' || tab === 'stnotes' || tab === 'backup') ? 'var(--ink)' : 'var(--ink-dim)',
-                border: '1px solid ' + ((tab === 'history' || tab === 'library' || tab === 'resources' || tab === 'stnotes' || tab === 'backup' || menuOpen) ? 'var(--accent)' : 'var(--border)'),
+                background: (tab === 'history' || tab === 'library' || tab === 'resources' || tab === 'stnotes') ? 'var(--accent-dim)' : 'transparent',
+                color: (tab === 'history' || tab === 'library' || tab === 'resources' || tab === 'stnotes') ? 'var(--ink)' : 'var(--ink-dim)',
+                border: '1px solid ' + ((tab === 'history' || tab === 'library' || tab === 'resources' || tab === 'stnotes' || menuOpen) ? 'var(--accent)' : 'var(--border)'),
                 padding: '8px 14px',
                 fontFamily: 'var(--font-mono)',
                 fontSize: '12px',
@@ -1327,8 +1326,7 @@ function Header({ tab, setTab, activeCount, currentDay, factionTurnReady, pendin
                     { id: 'resources', label: 'Party Resources' },
                     { id: 'stnotes', label: 'ST Notes' },
                     { id: 'library', label: 'Library' },
-                    { id: 'history', label: 'History' },
-                    { id: 'backup', label: 'Backup / Restore' }
+                    { id: 'history', label: 'History' }
                   ].map((item, i, arr) => (
                     <button
                       key={item.id}
@@ -4804,11 +4802,10 @@ function PartyResourcesTab({ resources, onAdjust, onSet }) {
         {RESOURCE_FIELDS.map(({ key, label }) => {
           const val = resources[key] ?? 0;
           return (
-            <div key={key} style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', padding: '10px 14px' }} className="flex items-center gap-2 flex-wrap">
-              <div style={{ flex: '0 0 80px', fontFamily: 'var(--font-display)', fontSize: '14px', color: 'var(--ink)', letterSpacing: '0.05em' }}>
+            <div key={key} style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', padding: '10px 14px' }} className="flex items-center gap-3">
+              <div style={{ flex: '0 0 100px', fontFamily: 'var(--font-display)', fontSize: '14px', color: 'var(--ink)', letterSpacing: '0.05em' }}>
                 {label}
               </div>
-              <SmallBtn variant="dim" onClick={() => onAdjust(key, -10)}>−10</SmallBtn>
               <SmallBtn variant="dim" onClick={() => onAdjust(key, -5)}>−5</SmallBtn>
               <SmallBtn variant="dim" onClick={() => onAdjust(key, -1)}>−1</SmallBtn>
               <input
@@ -4816,11 +4813,10 @@ function PartyResourcesTab({ resources, onAdjust, onSet }) {
                 min="0"
                 value={val}
                 onChange={e => onSet(key, e.target.value)}
-                style={{ flex: 1, minWidth: '60px', textAlign: 'center', fontSize: '17px', fontWeight: 700, color: val === 0 ? 'var(--ink-faint)' : 'var(--ink)' }}
+                style={{ flex: 1, textAlign: 'center', fontSize: '17px', fontWeight: 700, color: val === 0 ? 'var(--ink-faint)' : 'var(--ink)' }}
               />
               <SmallBtn variant="dim" onClick={() => onAdjust(key, 1)}>+1</SmallBtn>
               <SmallBtn variant="dim" onClick={() => onAdjust(key, 5)}>+5</SmallBtn>
-              <SmallBtn variant="dim" onClick={() => onAdjust(key, 10)}>+10</SmallBtn>
             </div>
           );
         })}
@@ -4856,153 +4852,6 @@ function StNotesTab({ notes, onChange }) {
           minHeight: '400px'
         }}
       />
-    </div>
-  );
-}
-
-// === BACKUP / RESTORE TAB ===
-
-function BackupTab({ getState, applyState }) {
-  const [pasted, setPasted] = useState('');
-  const [importMessage, setImportMessage] = useState(null);
-  const [confirmReplace, setConfirmReplace] = useState(false);
-
-  const downloadExport = () => {
-    const state = getState();
-    const json = JSON.stringify(state, null, 2);
-    const blob = new Blob([json], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    const date = new Date().toISOString().slice(0, 10);
-    a.href = url;
-    a.download = `ate-tracker-backup-${date}.json`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-  };
-
-  const copyToClipboard = () => {
-    const state = getState();
-    const json = JSON.stringify(state);
-    navigator.clipboard.writeText(json).then(
-      () => setImportMessage({ type: 'good', text: 'Copied to clipboard.' }),
-      () => setImportMessage({ type: 'bad', text: 'Copy failed. Use Download instead.' })
-    );
-  };
-
-  const handleFileUpload = (e) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (ev) => {
-      setPasted(ev.target.result);
-      setImportMessage({ type: 'good', text: `Loaded ${file.name}. Review then click "Replace all data".` });
-    };
-    reader.onerror = () => setImportMessage({ type: 'bad', text: 'Could not read file.' });
-    reader.readAsText(file);
-    e.target.value = ''; // reset so same file can be reselected
-  };
-
-  const tryImport = () => {
-    let parsed;
-    try {
-      parsed = JSON.parse(pasted);
-    } catch (err) {
-      setImportMessage({ type: 'bad', text: 'Not valid JSON. Check the data and try again.' });
-      return;
-    }
-    if (!parsed || typeof parsed !== 'object') {
-      setImportMessage({ type: 'bad', text: 'JSON parsed but does not look like backup data.' });
-      return;
-    }
-    applyState(parsed);
-    setImportMessage({ type: 'good', text: 'Data restored. Refresh the page if anything looks stale.' });
-    setPasted('');
-    setConfirmReplace(false);
-  };
-
-  return (
-    <div className="py-6 space-y-6">
-      <SectionHeader>Backup / Restore</SectionHeader>
-      <div style={{ fontSize: '12px', color: 'var(--ink-dim)', lineHeight: 1.5 }}>
-        Move data between devices manually. Export saves a JSON file with everything in this tracker. Import replaces everything with a previously-exported backup. There is no live sync — both devices keep their own copy until you import.
-      </div>
-
-      {/* EXPORT */}
-      <section style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', padding: '14px' }} className="space-y-3">
-        <div style={{ fontFamily: 'var(--font-display)', fontSize: '14px', color: 'var(--accent)', letterSpacing: '0.1em' }}>
-          EXPORT
-        </div>
-        <div style={{ fontSize: '11px', color: 'var(--ink-dim)' }}>
-          Saves all factions, jobs, goals, players, history, ST notes, resources, and the current day.
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <SmallBtn variant="accent" onClick={downloadExport}>↓ Download .json</SmallBtn>
-          <SmallBtn variant="dim" onClick={copyToClipboard}>Copy to clipboard</SmallBtn>
-        </div>
-      </section>
-
-      {/* IMPORT */}
-      <section style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', padding: '14px' }} className="space-y-3">
-        <div style={{ fontFamily: 'var(--font-display)', fontSize: '14px', color: 'var(--accent)', letterSpacing: '0.1em' }}>
-          IMPORT
-        </div>
-        <div style={{ fontSize: '11px', color: 'var(--ink-dim)' }}>
-          Either upload a .json file you previously exported, or paste exported JSON below. Importing <span style={{ color: 'var(--danger)', fontWeight: 700 }}>replaces all current data</span> — export first if you want a backup.
-        </div>
-
-        <label className="flex items-center gap-2" style={{ cursor: 'pointer' }}>
-          <input
-            type="file"
-            accept="application/json,.json"
-            onChange={handleFileUpload}
-            style={{ fontSize: '12px', color: 'var(--ink-dim)' }}
-          />
-        </label>
-
-        <textarea
-          value={pasted}
-          onChange={e => setPasted(e.target.value)}
-          placeholder="...or paste exported JSON here"
-          rows={6}
-          style={{
-            width: '100%',
-            fontFamily: 'var(--font-mono)',
-            fontSize: '11px',
-            padding: '10px',
-            background: 'var(--bg-card-2)',
-            border: '1px solid var(--border)',
-            color: 'var(--ink)',
-            resize: 'vertical'
-          }}
-        />
-
-        {importMessage && (
-          <div style={{
-            fontSize: '11px',
-            color: importMessage.type === 'good' ? 'var(--good)' : 'var(--danger)',
-            padding: '6px 8px',
-            background: 'var(--bg-card-2)',
-            border: '1px solid ' + (importMessage.type === 'good' ? 'var(--good)' : 'var(--danger)')
-          }}>
-            {importMessage.text}
-          </div>
-        )}
-
-        <div className="flex justify-end gap-2">
-          {!confirmReplace ? (
-            <SmallBtn variant="danger" onClick={() => setConfirmReplace(true)} disabled={!pasted.trim()}>
-              Replace all data
-            </SmallBtn>
-          ) : (
-            <>
-              <SmallBtn variant="dim" onClick={() => setConfirmReplace(false)}>Cancel</SmallBtn>
-              <SmallBtn variant="danger" onClick={tryImport}>Confirm replace</SmallBtn>
-            </>
-          )}
-        </div>
-      </section>
     </div>
   );
 }
@@ -5628,3 +5477,10 @@ function ChainModal({ prompt, factions, library, onAccept, onSkip }) {
     </div>
   );
 }
+
+
+const root = ReactDOM.createRoot(document.getElementById('root'));
+root.render(<App />);
+</script>
+</body>
+</html>
