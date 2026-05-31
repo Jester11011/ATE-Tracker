@@ -208,13 +208,6 @@ const composeAbsDay = (year, seasonIndex, dayInSeason) => {
   return ((y - 1) * 4 + s) * DAYS_PER_SEASON + d;
 };
 
-// Get the absolute day for the start of the next season after `absDay`
-const startOfNextSeason = (absDay) => {
-  const b = dayBreakdown(absDay);
-  const daysLeft = DAYS_PER_SEASON - b.dayInSeason + 1;
-  return absDay + daysLeft;
-};
-
 // Reusable button style for items in the time menu popover
 const timeMenuItemStyle = (color) => ({
   display: 'block',
@@ -276,7 +269,7 @@ const DEFAULT_FACTIONS = [
   { id: 'militia', name: 'Dustfall Militia / Thorn loyalists', rep: 0, notes: 'Mayor Thorin\'s remaining people. Jacob Thorn. Quiet faction now.', history: [] }
 ];
 
-const SOURCE_TYPES = ['Bar Rumor', 'Custom', 'Faction Principal', 'Job Board', 'NPC Direct'];
+const SOURCE_TYPES = ['Bar Rumor', 'Faction Principal', 'Job Board', 'NPC Direct'];
 
 const STORAGE_KEY = 'ate-jobs-state-v1';
 
@@ -730,32 +723,19 @@ function App() {
   const runFactionTurn = () => {
     const active = goals.filter(g => g.status !== 'resolved' && g.term === 'seasonal');
     const rollResults = [];
+
+    // Roll and apply each goal individually so cascade logic (conflicts/alliances) fires.
+    // This matches the behavior of the single-goal "Roll d100" button.
     for (const g of active) {
-      // Use current goals state at time of each roll — but since setGoals is batched,
-      // we do them serially via a synchronous approach: roll each, accumulate, apply via setGoals once
       const baseRoll = Math.floor(Math.random() * 100) + 1;
       const penalty = shortcutPenaltyForFaction(g.factionId);
       const finalRoll = Math.max(1, Math.min(100, baseRoll + penalty));
       const bucket = bucketFor(finalRoll);
+      const reasonText = `Faction turn (rolled ${baseRoll}${penalty !== 0 ? (penalty > 0 ? ' +' + penalty : ' ' + penalty) : ''} = ${finalRoll}, ${bucket.label})`;
+      // 'roll' source triggers cascades inside advanceGoal
+      advanceGoal(g.id, bucket.delta, reasonText, 'roll');
       rollResults.push({ goal: g, baseRoll, penalty, finalRoll, bucket });
     }
-
-    // Apply all changes in one setGoals call
-    setGoals(prev => prev.map(g => {
-      const r = rollResults.find(x => x.goal.id === g.id);
-      if (!r) return g;
-      const newProgress = clampProgress(g.progress + r.bucket.delta);
-      const actual = newProgress - g.progress;
-      const reasonText = `Faction turn (rolled ${r.baseRoll}${r.penalty !== 0 ? (r.penalty > 0 ? ' +' + r.penalty : ' ' + r.penalty) : ''} = ${r.finalRoll}, ${r.bucket.label})`;
-      return {
-        ...g,
-        progress: newProgress,
-        progressLog: [
-          { at: Date.now(), day: currentDay, change: actual, reason: reasonText, source: 'roll', bucket: r.bucket.label, finalRoll: r.finalRoll },
-          ...g.progressLog
-        ]
-      };
-    }));
 
     setLastFactionTurnDay(currentDay);
     setFactionTurnPrompt({ results: rollResults, day: currentDay });
@@ -1584,6 +1564,7 @@ function SectionHeader({ children }) {
 
 function JobCard({ job, factions, goals, onUpdate, onDelete, onResolveStart }) {
   const [expanded, setExpanded] = useState(false);
+  const [confirmDecline, setConfirmDecline] = useState(false);
   const faction = factionById(factions, job.factionId);
   const daysOut = job.status === 'active' && (job.daysRemaining ?? 0) <= 0;
 
@@ -1614,7 +1595,14 @@ function JobCard({ job, factions, goals, onUpdate, onDelete, onResolveStart }) {
           {job.status === 'offered' && (
             <>
               <SmallBtn onClick={() => onUpdate(job.id, { status: 'active' })}>Take</SmallBtn>
-              <SmallBtn onClick={() => onDelete(job.id)} variant="dim">Decline</SmallBtn>
+              {!confirmDecline ? (
+                <SmallBtn onClick={() => setConfirmDecline(true)} variant="dim">Decline</SmallBtn>
+              ) : (
+                <>
+                  <SmallBtn onClick={() => setConfirmDecline(false)} variant="dim">Cancel</SmallBtn>
+                  <SmallBtn onClick={() => onDelete(job.id)} variant="danger">Confirm</SmallBtn>
+                </>
+              )}
             </>
           )}
           {job.status === 'active' && (
@@ -2075,7 +2063,7 @@ function GoalEffectsEditor({ goalEffects, goals, factions, jobTier, onChange }) 
   );
 }
 
-function SmallBtn({ children, onClick, variant }) {
+function SmallBtn({ children, onClick, variant, disabled }) {
   const styles = {
     default: { background: 'var(--border)', color: 'var(--ink)', border: '1px solid var(--border-strong)' },
     dim: { background: 'transparent', color: 'var(--ink-dim)', border: '1px solid var(--border)' },
@@ -2085,7 +2073,8 @@ function SmallBtn({ children, onClick, variant }) {
   const style = styles[variant] || styles.default;
   return (
     <button
-      onClick={onClick}
+      onClick={disabled ? undefined : onClick}
+      disabled={disabled}
       style={{
         ...style,
         padding: '4px 10px',
@@ -2093,7 +2082,8 @@ function SmallBtn({ children, onClick, variant }) {
         fontSize: '11px',
         letterSpacing: '0.1em',
         textTransform: 'uppercase',
-        cursor: 'pointer'
+        cursor: disabled ? 'not-allowed' : 'pointer',
+        opacity: disabled ? 0.4 : 1
       }}
     >
       {children}
@@ -3323,6 +3313,7 @@ function GoalsTab({ goals, factions, rumors, currentDay, shortcutPenaltyForFacti
                 goal={g}
                 factions={factions}
                 goals={goals}
+                currentDay={currentDay}
                 shortcutPenalty={shortcutPenaltyForFaction(g.factionId)}
                 onUpdate={onUpdateGoal}
                 onDelete={onDeleteGoal}
@@ -3346,6 +3337,7 @@ function GoalsTab({ goals, factions, rumors, currentDay, shortcutPenaltyForFacti
                 goal={g}
                 factions={factions}
                 goals={goals}
+                currentDay={currentDay}
                 shortcutPenalty={0}
                 onUpdate={onUpdateGoal}
                 onDelete={onDeleteGoal}
@@ -3389,10 +3381,6 @@ function GoalForm({ mode, goal, factions, existingGoals, onSave, onCancel, lockF
 
   const longTermGoalsForFaction = (existingGoals || []).filter(g =>
     g.term === 'long' && g.factionId === factionId && g.status !== 'resolved' && (!goal || g.id !== goal.id)
-  );
-
-  const otherGoals = (existingGoals || []).filter(g =>
-    g.status !== 'resolved' && (!goal || g.id !== goal.id)
   );
 
   // Enforcement: each faction has at most one active seasonal AND one active long-term goal
@@ -3656,7 +3644,7 @@ function GoalForm({ mode, goal, factions, existingGoals, onSave, onCancel, lockF
   );
 }
 
-function GoalCard({ goal, factions, goals, shortcutPenalty, onUpdate, onDelete, onAdvance, onRoll, onRumorPrompt, onOfferAsJob }) {
+function GoalCard({ goal, factions, goals, currentDay, shortcutPenalty, onUpdate, onDelete, onAdvance, onRoll, onRumorPrompt, onOfferAsJob }) {
   const [expanded, setExpanded] = useState(false);
   const [editing, setEditing] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -3703,7 +3691,7 @@ function GoalCard({ goal, factions, goals, shortcutPenalty, onUpdate, onDelete, 
   };
 
   const markResolved = (status) => {
-    onUpdate(goal.id, { status: 'resolved', resolvedOnDay: Date.now(), resolution: status });
+    onUpdate(goal.id, { status: 'resolved', resolvedOnDay: currentDay, resolution: status });
     // Bump linked long-term goal if succeeded
     if (status === 'succeeded' && goal.advancesGoalId) {
       onAdvance(goal.advancesGoalId, 10, `Linked seasonal goal succeeded: ${goal.title}`, 'linked');
@@ -3882,6 +3870,7 @@ function GoalCard({ goal, factions, goals, shortcutPenalty, onUpdate, onDelete, 
 function RumorRow({ rumor, factions, onUpdate, onDelete }) {
   const [editing, setEditing] = useState(false);
   const [text, setText] = useState(rumor.text);
+  const [confirmDelete, setConfirmDelete] = useState(false);
   const faction = rumor.factionId ? factionById(factions, rumor.factionId) : null;
 
   if (editing) {
@@ -3916,7 +3905,14 @@ function RumorRow({ rumor, factions, onUpdate, onDelete }) {
           <SmallBtn variant="dim" onClick={() => onUpdate(rumor.id, { delivered: false })}>Undeliver</SmallBtn>
         )}
         <SmallBtn variant="dim" onClick={() => setEditing(true)}>Edit</SmallBtn>
-        <SmallBtn variant="dim" onClick={() => onDelete(rumor.id)}>×</SmallBtn>
+        {!confirmDelete ? (
+          <SmallBtn variant="dim" onClick={() => setConfirmDelete(true)}>×</SmallBtn>
+        ) : (
+          <>
+            <SmallBtn variant="dim" onClick={() => setConfirmDelete(false)}>Cancel</SmallBtn>
+            <SmallBtn variant="danger" onClick={() => onDelete(rumor.id)}>Delete</SmallBtn>
+          </>
+        )}
       </div>
     </div>
   );
